@@ -56,7 +56,7 @@ Generates a 3-sheet professional XLSX report:
 | Charts | TradingView Lightweight-Charts |
 | Data APIs | Alpha Vantage (markets), Finnhub (news) |
 | Excel | SheetJS (XLSX) |
-| Deployment | Vercel (recommended) |
+| Deployment | netlify |
 
 ---
 

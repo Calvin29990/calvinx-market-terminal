@@ -54,7 +54,7 @@ type Analytics = {
   rsi14: number | null;
 };
 
-const ALPHA_VANTAGE_KEY = "90d6f175e3eb4ca8b4ba881b41516d1f";
+const ALPHA_VANTAGE_KEY = "J0NY9ESFK8GRYN41";
 const FINNHUB_KEY = "d6m5p81r01qi0ajl0o50d6m5p81r01qi0ajl0o5g";
 
 const QUICK_SYMBOLS = ["AAPL", "MSFT", "EURUSD", "BTC", "TSLA"];
@@ -244,39 +244,41 @@ function demoMarketResponse(input: string): MarketResponse {
 }
 
 async function fetchMarketData(input: string): Promise<MarketResponse | null> {
-  const inferred = inferSymbol(input);
-  // Twelve Data : actions (AAPL), FX (EUR/USD) et crypto (BTC/USD) sur le même endpoint
-  const url = `https://api.twelvedata.com/time_series?symbol=${inferred.symbol}&interval=1day&outputsize=100&apikey=${ALPHA_VANTAGE_KEY}`;
-
   try {
+    const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${input}&outputsize=compact&apikey=${ALPHA_VANTAGE_KEY}`;
+
     const response = await fetch(url);
     const data = await response.json();
 
-    // Limite atteinte ou erreur → fallback démo
-    if (data.status === "error" || !Array.isArray(data.values) || data.values.length === 0) {
-      console.warn("Twelve Data limite/erreur:", data?.message);
-      return demoMarketResponse(input);
+    // Rate limit protection
+    if (data.Note || data.Information) {
+      console.warn("Rate limit atteint");
+      return demoMarketResponse(input); // fallback stable
     }
 
-    // values = du plus récent au plus ancien → on remet en ordre chronologique
-    const entries: Candle[] = data.values
-      .map((v: any) => ({
-        time: v.datetime,
-        open: parseFloat(v.open),
-        high: parseFloat(v.high),
-        low: parseFloat(v.low),
-        close: parseFloat(v.close),
-        volume: v.volume ? parseFloat(v.volume) : null,
+    if (!data["Time Series (Daily)"]) {
+      console.warn("Pas de données pour", input);
+      return demoMarketResponse(input); // fallback stable
+    }
+
+    const entries = Object.entries(data["Time Series (Daily)"])
+      .map(([date, values]: any) => ({
+        time: date,
+        open: parseFloat(values["1. open"]),
+        high: parseFloat(values["2. high"]),
+        low: parseFloat(values["3. low"]),
+        close: parseFloat(values["4. close"]),
+        volume: parseFloat(values["5. volume"])
       }))
-      .reverse()
+      .sort((a, b) => a.time.localeCompare(b.time))
       .slice(-100);
 
     const latest = entries[entries.length - 1];
-    const previous = entries[entries.length - 2] ?? latest;
+    const previous = entries[entries.length - 2];
 
     return {
-      symbol: inferred.symbol,
-      assetType: inferred.assetType,
+      symbol: input,
+      assetType: "equity",
       candles: entries,
       snapshot: {
         lastPrice: latest.close,
@@ -284,10 +286,11 @@ async function fetchMarketData(input: string): Promise<MarketResponse | null> {
         volume: latest.volume,
         high: latest.high,
         low: latest.low,
-        updatedAt: latest.time,
+        updatedAt: latest.time
       },
-      source: "live",
+      source: "live"
     };
+
   } catch (error) {
     console.error("Erreur API:", error);
     return demoMarketResponse(input); // fallback si erreur réseau
